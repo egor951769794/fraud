@@ -9,8 +9,15 @@ from watchdog.observers import Observer
 from watchdog.events import LoggingEventHandler, PatternMatchingEventHandler
 from pymongo.errors import DuplicateKeyError
 
+import pandas as pd
 
-def validate_csv(record):
+from src.preprocessor import Preprocessing
+from src.kfold import KFoldTargetEncoderTrain
+from src.predictor import Prediction
+
+
+
+def validate_csv(record): # не используется
     if record.count("\"") != 2:
         return False
     record = record.split("\"")
@@ -33,12 +40,8 @@ class Record(Document):
     city: str
     address: str
 
-class Test(Document):
-    id: Indexed(int)
-    text: str
 
-
-async def test(path):
+async def test(path): # не используется
     client = AsyncIOMotorClient("mongodb://localhost:27017")
     await init_beanie(database=client.transactions, document_models=[Record])
 
@@ -67,12 +70,63 @@ async def test(path):
                 except DuplicateKeyError:
                     print("Ошибка первичного ключа")
 
+def get_df(path):
+    success = False
+    while not success:
+        try:
+            sep = ''
+            with open(path, 'r') as f:
+                for i, line in enumerate(f):
+                    if i == 0:
+                        line1 = line.replace('id_transaction', '')
+                        sep = line1[0]
+                        if line1[1] != 'd':
+                            raise Exception("Ошибка: неверный формат файла")
+                    if i > 0:
+                        break
+
+            df = pd.read_csv(path, sep=sep)
+            print(df.head(5))
+            if not df.empty:
+                success = True
+        except IOError:
+            print("Ожидание загрузки файла...")
+            time.sleep(1)
+
+    if set([
+        'id_transaction',
+        'date',
+        'card',
+        'client',
+        'date_of_birth',
+        'passport',
+        'passport_valid_to',
+        'phone',
+        'operation_type',
+        'amount',
+        'operation_result',
+        'terminal_type',
+        'city',
+        'address'
+    ]).issubset(df.columns):
+        return df
+    else:
+        raise Exception("Ошибка: Данные некорректны")
+
 def on_create(event):
     path = os.path.dirname(__file__) + "\\raw_data\\" + event.src_path.split("\\")[1]
     print(f"\nПолучен файл {path}")
     if path.endswith('.csv'):
-        print("Загрузка файла в базу данных...")
-        asyncio.run(test(path))
+        print("Обработка данных...")
+        try:
+            df = get_df(path)
+            prepros = Preprocessing(verbosity=True)
+            print("Преобразование...")
+            df_processed = prepros.transform(df)
+            print(df_processed.head(5))
+        except Exception as e:
+            print(e)
+
     else:
         print("Ошибка: неверный формат файла")
 
@@ -90,3 +144,4 @@ if __name__ == "__main__":
     finally:
         observer.stop()
         observer.join()
+        

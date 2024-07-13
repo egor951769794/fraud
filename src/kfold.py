@@ -23,7 +23,7 @@ class KFoldTargetEncoderTrain(BaseEstimator, TransformerMixin):
             X_tr, X_val = X.iloc[tr_ind], X.iloc[val_ind]
             X.loc[X.index[val_ind], col_mean_name] = X_val[self.colnames].map(X_tr.groupby(self.colnames)
                                      [self.targetName].mean())
-            X[col_mean_name].fillna(mean_of_target, inplace = True)
+            X[col_mean_name] = X[col_mean_name].fillna(mean_of_target)
         if self.verbosity:
             encoded_feature = X[col_mean_name].values
             print('Correlation between the new feature, {} and, {} is {}.'.format(col_mean_name,self.targetName,                    
@@ -32,3 +32,4 @@ class KFoldTargetEncoderTrain(BaseEstimator, TransformerMixin):
         if self.discardOriginal_col:
             X = X.drop(self.targetName, axis=1)
         return X
+    

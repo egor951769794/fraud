@@ -43,6 +43,8 @@ class Preprocessing(BaseEstimator, TransformerMixin):
 
         df['fair_docs'] = df.apply(lambda x: x['same_phone'] and x['same_passport'], axis=1)
 
+        print("KFold...")
+
         targetc = KFoldTargetEncoderTrain('address', 'fair_docs', n_fold=7)
         df = targetc.fit_transform(df)
         df['address_Kfold_Target_Enc'] = df['address_Kfold_Target_Enc'].apply(lambda x: x * 100)
@@ -53,7 +55,8 @@ class Preprocessing(BaseEstimator, TransformerMixin):
         targetc = KFoldTargetEncoderTrain('terminal_type', 'fair_docs', n_fold=60)
         df = targetc.fit_transform(df)
 
-        df.drop(['prev_phone', 'prev_passport'], inplace=True)
+        # df.drop(['prev_phone', 'prev_passport'], inplace=True)
+        # print("13231321")
 
         if self.verbosity:
             print(df.info())
