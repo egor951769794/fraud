@@ -1,6 +1,8 @@
 import asyncio, aiofiles
 from motor.motor_asyncio import AsyncIOMotorClient
 
+import threading
+
 from beanie import Document, Indexed, init_beanie
 import os
 import time
@@ -8,6 +10,7 @@ import logging
 from watchdog.observers import Observer
 from watchdog.events import LoggingEventHandler, PatternMatchingEventHandler
 from pymongo.errors import DuplicateKeyError
+
 
 import pandas as pd
 
@@ -112,9 +115,8 @@ def get_df(path):
         return df
     else:
         raise Exception("Ошибка: Данные некорректны")
-
-def on_create(event):
-    path = os.path.dirname(__file__) + "\\raw_data\\" + event.src_path.split("\\")[1]
+    
+def file_processing_subthread(path):
     print(f"\nПолучен файл {path}")
     if path.endswith('.csv'):
         print("Обработка данных...")
@@ -124,11 +126,33 @@ def on_create(event):
             print("Преобразование...")
             df_processed = prepros.transform(df)
             print(df_processed.head(5))
+            thread = threading.Thread(target=print, args=("new thread started!",))
+            thread.start()
         except Exception as e:
             print(e)
 
     else:
         print("Ошибка: неверный формат файла")
+
+def on_create(event):
+    path = os.path.dirname(__file__) + "\\raw_data\\" + event.src_path.split("\\")[1]
+
+    thread = threading.Thread(target=file_processing_subthread, args=(path,))
+    thread.start()
+    # print(f"\nПолучен файл {path}")
+    # if path.endswith('.csv'):
+    #     print("Обработка данных...")
+    #     try:
+    #         df = get_df(path)
+    #         prepros = Preprocessing(verbosity=True)
+    #         print("Преобразование...")
+    #         df_processed = prepros.transform(df)
+    #         print(df_processed.head(5))
+    #     except Exception as e:
+    #         print(e)
+
+    # else:
+    #     print("Ошибка: неверный формат файла")
 
 
 if __name__ == "__main__":
@@ -144,4 +168,3 @@ if __name__ == "__main__":
     finally:
         observer.stop()
         observer.join()
-        
