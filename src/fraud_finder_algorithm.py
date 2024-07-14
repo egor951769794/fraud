@@ -10,6 +10,7 @@ class FraudFinder:
     def calculate_frauds(self, X):
         db = OPTICS(min_samples=self.min_samples, eps=self.eps).fit(X[['time_diff_seconds_std', 'amount_std', 'address_Kfold_Target_Enc', 'is_passport_expired', 'same_passport', 'same_phone', 'operation_type_Kfold_Target_Enc', 'terminal_type_Kfold_Target_Enc']])
         labels = pd.Series(db.labels_)
+        X['labels'] = labels
         X['labels_std'] = stats.zscore(X['labels'])
 
         fraud_count = []
@@ -28,5 +29,5 @@ class FraudFinder:
 
             i += 0.01
 
-        is_fraud = labels.apply(lambda x: x['labels_std'] > fraud_index, axis=1)
+        is_fraud = X.apply(lambda x: x['labels_std'] > fraud_index, axis=1)
         return is_fraud

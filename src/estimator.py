@@ -13,14 +13,25 @@ class Estimator:
         state = torch.load(filename)
         self.model.load_state_dict(state['state_dict'])
         self.optimizer = Adam(self.model.parameters(), lr=0.0001)
-        self.optimizer.load_state_dict(state['optimizer_state_dict'])
+        self.optimizer.load_state_dict(state['optimizer'])
         self.best_acc = state['acc']
         self.epoch = state['epoch']
         self.loss_fn = nn.BCELoss()
 
     def train(self, X, y):
+        X = X[[
+            'time_diff_seconds_std', 
+            'amount_std', 
+            'address_Kfold_Target_Enc', 
+            'is_passport_expired', 
+            'same_passport', 
+            'same_phone', 
+            'operation_type_Kfold_Target_Enc', 
+            'terminal_type_Kfold_Target_Enc']]
+        
         X = torch.tensor(X.astype(np.float32).values)
-        y = torch.tensor(X.astype(np.float32).values)
+        y = torch.tensor(y.astype(np.float32).values)
+
 
         # split train test
         X_train, y_train, X_test, y_test = train_test_split(X, y, test_size=0.33)

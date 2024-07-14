@@ -13,11 +13,13 @@ from pymongo.errors import DuplicateKeyError
 
 
 import pandas as pd
+import numpy
 
 from src.preprocessor import Preprocessing
 from src.kfold import KFoldTargetEncoderTrain
 from src.predictor import Prediction
-
+from src.estimator import Estimator
+from src.fraud_finder_algorithm import FraudFinder
 
 
 def validate_csv(record): # не используется
@@ -116,7 +118,27 @@ def get_df(path):
     else:
         raise Exception("Ошибка: Данные некорректны")
     
-def file_processing_subthread(path):
+async def data_save_subthread(df):
+    print("Подключение к БД...")
+    client = AsyncIOMotorClient("mongodb://localhost:27017")
+    await init_beanie(database=client.transactions, document_models=[Record])
+    print("Сохранение данных в БД...")
+    
+    
+def model_train_subthread(filename, df):
+    print("Обучение модели...")
+    estimator = Estimator(filename)
+    X = df
+    y = FraudFinder().calculate_frauds(df)
+    estimator.train(X, y)
+
+def process_file(filename, df):
+    db_save_thread = threading.Thread(target=asyncio.run, args=(data_save_subthread(df),))
+    db_save_thread.start()
+    train_thread = threading.Thread(target=model_train_subthread, args=(filename, df,))
+    train_thread.start()
+    
+def file_handling_subthread(path):
     print(f"\nПолучен файл {path}")
     if path.endswith('.csv'):
         print("Обработка данных...")
@@ -125,19 +147,19 @@ def file_processing_subthread(path):
             prepros = Preprocessing(verbosity=True)
             print("Преобразование...")
             df_processed = prepros.transform(df)
-            print(df_processed.head(5))
-            thread = threading.Thread(target=print, args=("new thread started!",))
-            thread.start()
+            process_file(os.path.dirname(__file__) + "\\src\\compiled\\nn_model.pth.tar", df_processed)
+            
         except Exception as e:
             print(e)
 
     else:
         print("Ошибка: неверный формат файла")
 
+
 def on_create(event):
     path = os.path.dirname(__file__) + "\\raw_data\\" + event.src_path.split("\\")[1]
 
-    thread = threading.Thread(target=file_processing_subthread, args=(path,))
+    thread = threading.Thread(target=file_handling_subthread, args=(path,))
     thread.start()
     # print(f"\nПолучен файл {path}")
     # if path.endswith('.csv'):
@@ -156,6 +178,7 @@ def on_create(event):
 
 
 if __name__ == "__main__":
+
     path = './raw_data'
     event_handler = PatternMatchingEventHandler(["*"], None, False, True)
     event_handler.on_created = on_create
