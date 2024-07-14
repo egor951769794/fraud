@@ -1,5 +1,6 @@
 from sklearn.cluster import OPTICS
 import pandas as pd
+from scipy import stats
 
 class FraudFinder:
     def __init__(self, eps=0.1, min_samples=3):
@@ -7,6 +8,10 @@ class FraudFinder:
         self.min_samples = min_samples
 
     def calculate_frauds(self, X):
+        db = OPTICS(min_samples=self.min_samples, eps=self.eps).fit(X[['time_diff_seconds_std', 'amount_std', 'address_Kfold_Target_Enc', 'is_passport_expired', 'same_passport', 'same_phone', 'operation_type_Kfold_Target_Enc', 'terminal_type_Kfold_Target_Enc']])
+        labels = pd.Series(db.labels_)
+        X['labels_std'] = stats.zscore(X['labels'])
+
         fraud_count = []
         fraud_freq = 0
         fraud_index = 0
@@ -22,9 +27,6 @@ class FraudFinder:
                 fraud_freq = fraud_count[-1] / count[-1]
 
             i += 0.01
-
-        db = OPTICS(min_samples=self.min_samples, eps=self.eps).fit(X[['time_diff_seconds_std', 'amount_std', 'address_Kfold_Target_Enc', 'is_passport_expired', 'same_passport', 'same_phone', 'operation_type_Kfold_Target_Enc', 'terminal_type_Kfold_Target_Enc']])
-        labels = pd.Series(db.labels_)
 
         is_fraud = labels.apply(lambda x: x['labels_std'] > fraud_index, axis=1)
         return is_fraud
