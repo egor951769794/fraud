@@ -34,7 +34,7 @@ class Estimator:
 
 
         # split train test
-        X_train, y_train, X_test, y_test = train_test_split(X, y, test_size=0.33)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33)
 
         n_epochs = 25    # number of epochs to run
         batch_size = 60  # size of each batch
@@ -42,6 +42,7 @@ class Estimator:
 
         best_weights = None
         for epoch in range(self.epoch, self.epoch + n_epochs):
+            self.model.train()
             for start in batch_start:
                 # take a batch
                 X_batch = X_train[start:start+batch_size]
