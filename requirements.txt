@@ -1,8 +1,7 @@
-beanie
-aiofiles
 watchdog
 scikit-learn
 scipy
 numpy
 pandas
 torch
+bunnet

@@ -40,7 +40,7 @@ class Estimator:
         batch_size = 60  # size of each batch
         batch_start = torch.arange(0, len(X_train), batch_size)
 
-        best_weights = None
+        best_weights = self.model.state_dict()
         for epoch in range(self.epoch, self.epoch + n_epochs):
             self.model.train()
             for start in batch_start:

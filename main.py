@@ -1,79 +1,62 @@
-import asyncio, aiofiles
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import MongoClient
 
 import threading
 
-from beanie import Document, Indexed, init_beanie
+from bunnet import Document, Indexed, init_bunnet
 import os
 import time
-import logging
+from sys import argv
 from watchdog.observers import Observer
-from watchdog.events import LoggingEventHandler, PatternMatchingEventHandler
+from watchdog.events import PatternMatchingEventHandler
 from pymongo.errors import DuplicateKeyError
+from datetime import datetime, timedelta
 
 
 import pandas as pd
-import numpy
 
 from src.preprocessor import Preprocessing
-from src.kfold import KFoldTargetEncoderTrain
-from src.predictor import Prediction
 from src.estimator import Estimator
 from src.fraud_finder_algorithm import FraudFinder
 
 
-def validate_csv(record): # не используется
-    if record.count("\"") != 2:
-        return False
-    record = record.split("\"")
-    return record[0].count(",") == 13
-
-
 class Record(Document):
-    transaction: Indexed(str, unique=True)
-    date: str
-    card: str
-    client: str
-    date_of_birth: str
-    passport: str
-    passport_valid_to: str
-    phone: str
-    operation_type: str
-    amount: str
-    operation_result: str
-    terminal_type: str
-    city: str
-    address: str
+    id_transaction: Indexed(int, unique=True)
+    date: datetime
+    card: object
+    client: object
+    date_of_birth: datetime
+    passport: object
+    passport_valid_to: object
+    phone: object
+    operation_type: object
+    amount: float
+    operation_result: object
+    terminal_type: object
+    city: object
+    address: object
+    date_int: int
+    dob_int: int
+    time_diff_seconds: timedelta
+    time_diff_seconds_int: int
+    date_hour_int: int
+    date_day_int: int
+    amount_std: float
+    is_high_amount: bool
+    time_diff_seconds_std: float
+    is_passport_expired: bool
+    prev_passport: object
+    same_passport: bool
+    prev_phone: object
+    same_phone: bool
+    fair_docs: bool
+    address_Kfold_Target_Enc: float
+    operation_type_Kfold_Target_Enc: float
+    terminal_type_Kfold_Target_Enc: float
+    labels: float
+    labels_std: float
+    is_fraud: bool
 
 
-async def test(path): # не используется
-    client = AsyncIOMotorClient("mongodb://localhost:27017")
-    await init_beanie(database=client.transactions, document_models=[Record])
-
-    async with aiofiles.open(path, mode='r', encoding='utf-8') as f:
-        async for record in f: 
-            if validate_csv(record):
-                _record = record.split("\"")[0].split(",")
-                new_record = Record(
-                        transaction=_record[0],
-                        date=_record[1],
-                        card=_record[2],
-                        client=_record[3],
-                        date_of_birth=_record[4],
-                        passport=_record[5],
-                        passport_valid_to=_record[6],
-                        phone=_record[7],
-                        operation_type=_record[8],
-                        amount=_record[9],
-                        operation_result=_record[10],
-                        terminal_type=_record[11],
-                        city=_record[12],
-                        address=record.split("\"")[1]
-                    )
-                try:
-                    await new_record.insert()
-                except DuplicateKeyError:
-                    print("Ошибка первичного ключа")
 
 def get_df(path):
     success = False
@@ -86,7 +69,7 @@ def get_df(path):
                         line1 = line.replace('id_transaction', '')
                         sep = line1[0]
                         if line1[1] != 'd':
-                            raise Exception("Ошибка: неверный формат файла")
+                            raise Exception("\nОшибка: неверный формат файла")
                     if i > 0:
                         break
 
@@ -95,7 +78,7 @@ def get_df(path):
             if not df.empty:
                 success = True
         except IOError:
-            print("Ожидание загрузки файла...")
+            print("\nОжидание загрузки файла...")
             time.sleep(1)
 
     if set([
@@ -116,36 +99,89 @@ def get_df(path):
     ]).issubset(df.columns):
         return df
     else:
-        raise Exception("Ошибка: Данные некорректны")
-    
-async def data_save_subthread(df):
-    print("Подключение к БД...")
-    client = AsyncIOMotorClient("mongodb://localhost:27017")
-    await init_beanie(database=client.transactions, document_models=[Record])
-    print("Сохранение данных в БД...")
+        raise Exception("\nОшибка: Данные некорректны")
     
     
-def model_train_subthread(filename, df):
-    print("Обучение модели...")
+def data_save_subthread(df, y):
+    print("\nПодключение к БД...")
+    client = MongoClient("mongodb://localhost:27017")
+    init_bunnet(database=client.transactions, document_models=[Record])
+    print("\nПодключение к БД: успешно")
+
+    df['is_fraud'] = y
+    print("\nСохранение данных в БД...")
+    
+    for i, record in df.iterrows():
+        new_record = Record(
+            id_transaction = str(record['id_transaction']),
+            date = record['date'],
+            card = record['card'],
+            client = record['client'],
+            date_of_birth = record['date_of_birth'],
+            passport = record['passport'],
+            passport_valid_to = record['passport_valid_to'],
+            phone = record['phone'],
+            operation_type = record['operation_type'],
+            amount = record['amount'],
+            operation_result = record['operation_result'],
+            terminal_type = record['terminal_type'],
+            city = record['city'],
+            address = record['address'],
+            date_int = record['date_int'],
+            dob_int = record['dob_int'],
+            time_diff_seconds = record['time_diff_seconds'],
+            time_diff_seconds_int = record['time_diff_seconds_int'],
+            date_hour_int = record['date_hour_int'],
+            date_day_int = record['date_day_int'],
+            amount_std = record['amount_std'],
+            is_high_amount = record['is_high_amount'],
+            time_diff_seconds_std = record['time_diff_seconds_std'],
+            is_passport_expired = record['is_passport_expired'],
+            prev_passport = record['prev_passport'],
+            same_passport = record['same_passport'],
+            prev_phone = record['prev_phone'],
+            same_phone = record['same_phone'],
+            fair_docs = record['fair_docs'],
+            address_Kfold_Target_Enc = record['address_Kfold_Target_Enc'],
+            operation_type_Kfold_Target_Enc = record['operation_type_Kfold_Target_Enc'],
+            terminal_type_Kfold_Target_Enc = record['terminal_type_Kfold_Target_Enc'],
+            labels = record['labels'],
+            labels_std = record['labels_std'],
+            is_fraud = record['is_fraud'],
+        )
+
+        try:
+            new_record.insert()
+        except DuplicateKeyError:
+            print("\nОшибка первичного ключа")
+    
+    print("Данные сохранены")
+
+    
+def model_train_subthread(filename, X, y):
+    print("\nОбучение модели...")
     estimator = Estimator(filename)
-    X = df
-    y = FraudFinder().calculate_frauds(df)
     estimator.train(X, y)
+    print("\nОбучение завершено")
+    
 
 def process_file(filename, df):
-    db_save_thread = threading.Thread(target=asyncio.run, args=(data_save_subthread(df),))
+    X = df
+    y = FraudFinder().calculate_frauds(df)
+    db_save_thread = threading.Thread(target=data_save_subthread, args=(X, y,))
     db_save_thread.start()
-    train_thread = threading.Thread(target=model_train_subthread, args=(filename, df,))
-    train_thread.start()
+    if do_train:
+        train_thread = threading.Thread(target=model_train_subthread, args=(filename, X, y,))
+        train_thread.start()
     
 def file_handling_subthread(path):
     print(f"\nПолучен файл {path}")
     if path.endswith('.csv'):
-        print("Обработка данных...")
+        print("\nОбработка данных...")
         try:
             df = get_df(path)
             prepros = Preprocessing(verbosity=True)
-            print("Преобразование...")
+            print("\nПреобразование...")
             df_processed = prepros.transform(df)
             process_file(os.path.dirname(__file__) + "\\src\\compiled\\nn_model.pth.tar", df_processed)
             
@@ -153,7 +189,7 @@ def file_handling_subthread(path):
             print(e)
 
     else:
-        print("Ошибка: неверный формат файла")
+        print("\nОшибка: неверный формат файла")
 
 
 def on_create(event):
@@ -161,24 +197,10 @@ def on_create(event):
 
     thread = threading.Thread(target=file_handling_subthread, args=(path,))
     thread.start()
-    # print(f"\nПолучен файл {path}")
-    # if path.endswith('.csv'):
-    #     print("Обработка данных...")
-    #     try:
-    #         df = get_df(path)
-    #         prepros = Preprocessing(verbosity=True)
-    #         print("Преобразование...")
-    #         df_processed = prepros.transform(df)
-    #         print(df_processed.head(5))
-    #     except Exception as e:
-    #         print(e)
-
-    # else:
-    #     print("Ошибка: неверный формат файла")
 
 
 if __name__ == "__main__":
-
+    do_train = len(argv) > 1 and argv[1] == 'do-train'
     path = './raw_data'
     event_handler = PatternMatchingEventHandler(["*"], None, False, True)
     event_handler.on_created = on_create

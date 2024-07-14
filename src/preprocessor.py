@@ -29,7 +29,7 @@ class Preprocessing(BaseEstimator, TransformerMixin):
 
         df['amount_std'] = stats.zscore(df['amount'].astype(np.float64))
 
-        df['is_high_amount'] = df['amount_std'] > 1
+        df['is_high_amount'] = df['amount_std'] > 3
 
         df['time_diff_seconds_std'] = stats.zscore(df['time_diff_seconds_int'].astype(np.float64))
 
