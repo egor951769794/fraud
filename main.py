@@ -10,6 +10,7 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from pymongo.errors import DuplicateKeyError
 from datetime import datetime, timedelta
+from src.predictor import Prediction
 
 
 import pandas as pd
@@ -167,8 +168,10 @@ def model_train_subthread(filename, X, y):
 
 def process_file(filename, df):
     X = df
-    y = FraudFinder().calculate_frauds(df)
-    db_save_thread = threading.Thread(target=data_save_subthread, args=(X, y,))
+    X_pred = X[['time_diff_seconds_std', 'amount_std', 'address_Kfold_Target_Enc', 'is_passport_expired', 'same_passport', 'same_phone', 'operation_type_Kfold_Target_Enc', 'terminal_type_Kfold_Target_Enc']]
+    y_pred = Prediction(filename).predict(X_pred)
+    y = FraudFinder().calculate_frauds(X)
+    db_save_thread = threading.Thread(target=data_save_subthread, args=(X, y_pred,))
     db_save_thread.start()
     if do_train:
         train_thread = threading.Thread(target=model_train_subthread, args=(filename, X, y,))
