@@ -11,6 +11,7 @@ from watchdog.events import PatternMatchingEventHandler
 from pymongo.errors import DuplicateKeyError
 from datetime import datetime, timedelta
 from src.predictor import Prediction
+import torch
 
 
 import pandas as pd
@@ -164,18 +165,26 @@ def model_train_subthread(filename, X, y):
     estimator = Estimator(filename)
     estimator.train(X, y)
     print("\nОбучение завершено")
+
+def update_dashboard_subthread(df, dashboard):
+    dashboard.update_df(df)
     
 
 def process_file(filename, df):
-    X = df
-    X_pred = X[['time_diff_seconds_std', 'amount_std', 'address_Kfold_Target_Enc', 'is_passport_expired', 'same_passport', 'same_phone', 'operation_type_Kfold_Target_Enc', 'terminal_type_Kfold_Target_Enc']]
-    y_pred = Prediction(filename).predict(X_pred)
-    y = FraudFinder().calculate_frauds(X)
-    db_save_thread = threading.Thread(target=data_save_subthread, args=(X, y_pred,))
-    db_save_thread.start()
-    if do_train:
-        train_thread = threading.Thread(target=model_train_subthread, args=(filename, X, y,))
-        train_thread.start()
+    with torch.no_grad():
+        X = df
+        X_pred = X[['time_diff_seconds_std', 'amount_std', 'address_Kfold_Target_Enc', 'is_passport_expired', 'same_passport', 'same_phone', 'operation_type_Kfold_Target_Enc', 'terminal_type_Kfold_Target_Enc']]
+        y_pred = Prediction(filename).predict(X_pred).round().detach().numpy()
+        y = FraudFinder().calculate_frauds(X)
+        db_save_thread = threading.Thread(target=data_save_subthread, args=(X, y_pred,))
+        db_save_thread.start()
+        if do_train:
+            train_thread = threading.Thread(target=model_train_subthread, args=(filename, X, y,))
+            train_thread.start()
+        
+        X['is_fraud_pred'] = y_pred
+        # run_dashboard_thread = threading.Thread(target=update_dashboard_subthread, args=(X, dashboard))
+        # run_dashboard_thread.start()
     
 def file_handling_subthread(path):
     print(f"\nПолучен файл {path}")
@@ -200,7 +209,6 @@ def on_create(event):
 
     thread = threading.Thread(target=file_handling_subthread, args=(path,))
     thread.start()
-
 
 if __name__ == "__main__":
     do_train = len(argv) > 1 and argv[1] == 'do-train'
